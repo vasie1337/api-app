@@ -9,9 +9,9 @@ import (
 	"net/http"
 	"os"
 	"sort"
-	"time"
 )
 
+// one set entry in the resonee json format
 type DataEntry struct {
 	Code        string `json:"code"`
 	Name        string `json:"name"`
@@ -20,11 +20,16 @@ type DataEntry struct {
 	IconSVGURI  string `json:"icon_svg_uri"`
 }
 
+// a full response from the api conatining the sets as an array
 type Response struct {
 	Object  string      `json:"object"`
 	HasMore bool        `json:"has_more"`
 	Data    []DataEntry `json:"data"`
 }
+
+// csv filename to output the data to
+const outFile string = "sets.csv"
+const apiURL string = "https://api.scryfall.com/sets"
 
 func main() {
 	sets, err := fetchSets()
@@ -37,18 +42,16 @@ func main() {
 	sortSetsByReleaseDate(sets)
 	fmt.Println("Sorted sets by release date")
 
-	err = writeToCSV(sets, "sets.csv")
+	err = writeToCSV(sets, outFile)
 	if err != nil {
 		log.Fatalf("Error writing CSV: %v", err)
 	}
 
-	fmt.Printf("Exported %d sets to sets.csv\n", len(sets))
+	fmt.Printf("Exported %d sets to %s\n", len(sets), outFile)
 }
 
 func fetchSets() ([]DataEntry, error) {
-	url := "https://api.scryfall.com/sets"
-
-	resp, err := http.Get(url)
+	resp, err := http.Get(apiURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to make HTTP request: %w", err)
 	}
@@ -74,20 +77,7 @@ func fetchSets() ([]DataEntry, error) {
 
 func sortSetsByReleaseDate(sets []DataEntry) {
 	sort.Slice(sets, func(i, j int) bool {
-		dateI, errI := time.Parse("2006-01-02", sets[i].ReleasedAt)
-		dateJ, errJ := time.Parse("2006-01-02", sets[j].ReleasedAt)
-
-		if errI != nil && errJ == nil {
-			return false
-		}
-		if errI == nil && errJ != nil {
-			return true
-		}
-		if errI != nil && errJ != nil {
-			return sets[i].ReleasedAt < sets[j].ReleasedAt
-		}
-
-		return dateI.Before(dateJ)
+		return sets[i].ReleasedAt < sets[j].ReleasedAt
 	})
 }
 
