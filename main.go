@@ -50,6 +50,7 @@ func main() {
 	fmt.Printf("Exported %d sets to %s\n", len(sets), outFile)
 }
 
+// fetches all data from the api and returns in our format
 func fetchSets() ([]DataEntry, error) {
 	resp, err := http.Get(apiURL)
 	if err != nil {
@@ -75,12 +76,14 @@ func fetchSets() ([]DataEntry, error) {
 	return response.Data, nil
 }
 
+// sorts by iso release date
 func sortSetsByReleaseDate(sets []DataEntry) {
 	sort.Slice(sets, func(i, j int) bool {
 		return sets[i].ReleasedAt < sets[j].ReleasedAt
 	})
 }
 
+// writes our data back to custom format in a csv file
 func writeToCSV(sets []DataEntry, filename string) error {
 	file, err := os.Create(filename)
 	if err != nil {
