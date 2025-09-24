@@ -1,91 +1,123 @@
-/*
-{
-    "object": "list",
-    "has_more": false,
-    "data": [
-      {
-        "object": "set",
-        "id": "5d293ad8-a749-4725-bd5c-c4e1db828bd0",
-        "code": "ecl",
-        "mtgo_code": "ecl",
-        "arena_code": "ecl",
-        "name": "Lorwyn Eclipsed",
-        "uri": "https://api.scryfall.com/sets/5d293ad8-a749-4725-bd5c-c4e1db828bd0",
-        "scryfall_uri": "https://scryfall.com/sets/ecl",
-        "search_uri": "https://api.scryfall.com/cards/search?include_extras=true&include_variations=true&order=set&q=e%3Aecl&unique=prints",
-        "released_at": "2026-01-23",
-        "set_type": "expansion",
-        "card_count": 0,
-        "digital": false,
-        "nonfoil_only": true,
-        "foil_only": true,
-        "icon_svg_uri": "https://svgs.scryfall.io/sets/default.svg?1758513600"
-      },
-      {
-        "object": "set",
-        "id": "a75e6ceb-d62c-4063-8e96-f269e3a0b025",
-        "code": "tle",
-        "mtgo_code": "tle",
-        "arena_code": "tle",
-        "tcgplayer_id": 24422,
-        "name": "Avatar: The Last Airbender Eternal",
-        "uri": "https://api.scryfall.com/sets/a75e6ceb-d62c-4063-8e96-f269e3a0b025",
-        "scryfall_uri": "https://scryfall.com/sets/tle",
-        "search_uri": "https://api.scryfall.com/cards/search?include_extras=true&include_variations=true&order=set&q=e%3Atle&unique=prints",
-        "released_at": "2025-11-21",
-        "set_type": "expansion",
-        "card_count": 101,
-        "parent_set_code": "tla",
-        "digital": false,
-        "nonfoil_only": false,
-        "foil_only": false,
-        "icon_svg_uri": "https://svgs.scryfall.io/sets/tle.svg?1758513600"
-      },
+package main
 
-*/
+import (
+	"encoding/csv"
+	"encoding/json"
+	"fmt"
+	"io"
+	"log"
+	"net/http"
+	"os"
+	"sort"
+	"time"
+)
 
-/*
-Kolomnaam Scryfall json property
+type DataEntry struct {
+	Code        string `json:"code"`
+	Name        string `json:"name"`
+	ScryfallURI string `json:"scryfall_uri"`
+	ReleasedAt  string `json:"released_at"`
+	IconSVGURI  string `json:"icon_svg_uri"`
+}
 
-Code code
+type Response struct {
+	Object  string      `json:"object"`
+	HasMore bool        `json:"has_more"`
+	Data    []DataEntry `json:"data"`
+}
 
-Name name
+func main() {
+	sets, err := fetchSets()
+	if err != nil {
+		log.Fatalf("Error fetching sets: %v", err)
+	}
 
-API_url scryfall_uri
+	fmt.Printf("Fetched %d sets\n", len(sets))
 
-Released released_at
+	sortSetsByReleaseDate(sets)
+	fmt.Println("Sorted sets by release date")
 
-Icon_url Icon_svg_url
-*/
+	err = writeToCSV(sets, "sets.csv")
+	if err != nil {
+		log.Fatalf("Error writing CSV: %v", err)
+	}
 
-// https://api.scryfall.com/sets
+	fmt.Printf("Exported %d sets to sets.csv\n", len(sets))
+}
 
-// load all in json from get req
-// then parse to objects in mem
-/*
-Vereisten
+func fetchSets() ([]DataEntry, error) {
+	url := "https://api.scryfall.com/sets"
 
-- Gebruik de juiste API die beschikbaar is om de sets op te halen.
+	resp, err := http.Get(url)
+	if err != nil {
+		return nil, fmt.Errorf("failed to make HTTP request: %w", err)
+	}
+	defer resp.Body.Close()
 
-- Schrijf de sets weg naar een CSV-bestand.
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("API request failed with status: %d", resp.StatusCode)
+	}
 
-- Het uiteindelijke CSV-bestand moet de volgende kolommen bevatten:
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
 
-Kolomnaam Scryfall json property
+	var response Response
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse JSON response: %w", err)
+	}
 
-Code code
+	return response.Data, nil
+}
 
-Name name
+func sortSetsByReleaseDate(sets []DataEntry) {
+	sort.Slice(sets, func(i, j int) bool {
+		dateI, errI := time.Parse("2006-01-02", sets[i].ReleasedAt)
+		dateJ, errJ := time.Parse("2006-01-02", sets[j].ReleasedAt)
 
-API_url scryfall_uri
+		if errI != nil && errJ == nil {
+			return false
+		}
+		if errI == nil && errJ != nil {
+			return true
+		}
+		if errI != nil && errJ != nil {
+			return sets[i].ReleasedAt < sets[j].ReleasedAt
+		}
 
-Released released_at
+		return dateI.Before(dateJ)
+	})
+}
 
-Icon_url Icon_svg_url
+func writeToCSV(sets []DataEntry, filename string) error {
+	file, err := os.Create(filename)
+	if err != nil {
+		return fmt.Errorf("failed to create CSV file: %w", err)
+	}
+	defer file.Close()
 
+	writer := csv.NewWriter(file)
+	defer writer.Flush()
 
-- Het bestand moet geordend zijn op releasedatum van de set.
+	header := []string{"Code", "Name", "API_url", "Released", "Icon_url"}
+	if err := writer.Write(header); err != nil {
+		return fmt.Errorf("failed to write CSV header: %w", err)
+	}
 
-- Instructie hoe de applicatie gestart kan worden (en evt. geïnstalleerd als dit noodzakelijk is).
-*/
+	for _, set := range sets {
+		record := []string{
+			set.Code,
+			set.Name,
+			set.ScryfallURI,
+			set.ReleasedAt,
+			set.IconSVGURI,
+		}
+		if err := writer.Write(record); err != nil {
+			return fmt.Errorf("failed to write CSV record: %w", err)
+		}
+	}
 
+	return nil
+}
